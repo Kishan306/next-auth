@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { db } from "./db";
 import { compare } from "bcrypt";
+import GoogleProvider from "next-auth/providers/google";
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db),
@@ -12,9 +13,13 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: "/sign-in",
-    newUser: "/sign-up"
+    newUser: "/sign-up",
   },
   providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
     CredentialsProvider({
       name: "Credentials",
 
@@ -24,28 +29,33 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials, req) {
         // Add logic here to look up the user from the credentials supplied
-        if(!credentials?.email || !credentials?.password){
+        if (!credentials?.email || !credentials?.password) {
           return null;
         }
 
         //check if user with that email exists in database
         const existingUser = await db.user.findUnique({
           where: {
-            email: credentials.email
-          }
+            email: credentials.email,
+          },
         });
 
         //if user with email doesn't exist, return null
-        if(!existingUser){
+        if (!existingUser) {
           return null;
         }
 
-        //match passwords for verification
-        const passwordMatch = await compare(credentials.password, existingUser.password);
+        if (existingUser?.password) {
+          //match passwords for verification
+          const passwordMatch = await compare(
+            credentials.password,
+            existingUser.password
+          );
 
-        //if password doesn't match, return null
-        if(!passwordMatch){
-          return null;
+          //if password doesn't match, return null
+          if (!passwordMatch) {
+            return null;
+          }
         }
 
         //with both the above conditions satisfied, return userdata
@@ -53,29 +63,29 @@ export const authOptions: NextAuthOptions = {
         return {
           id: existingUser.id,
           username: existingUser.username,
-          email: existingUser.email
-        }
+          email: existingUser.email,
+        };
       },
     }),
   ],
   callbacks: {
-    async jwt({token, user }){
-      if(user){
+    async jwt({ token, user }) {
+      if (user) {
         return {
-          ...token, 
-          username: user.username
-        }
+          ...token,
+          username: user.username,
+        };
       }
-      return token
+      return token;
     },
-    async session({ session, user, token }){
+    async session({ session, user, token }) {
       return {
         ...session,
         user: {
           ...session.user,
-          username: token.username
-        }
-      }
-    }
-  }
+          username: token.username,
+        },
+      };
+    },
+  },
 };
